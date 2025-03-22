@@ -12,31 +12,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Passo 1: Checkout do código
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Passo 2: Configurar Node.js
       - name: Setup Node.js 18.x
         uses: actions/setup-node@v4
         with:
           node-version: 18.x
 
+      # Passo 3: Instalar dependências do sistema
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libnss3 libnspr4 libasound2t64
 
+      # Passo 4: Instalar Docker Compose
       - name: Install Docker Compose
         run: |
           sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
           sudo chmod +x /usr/local/bin/docker-compose
           docker-compose --version
 
-      - name: Install Dependencies
+      # Passo 5: Instalar dependências do projeto
+      - name: Install Project Dependencies
         run: |
           cd webapp
           npm install
           npm install @playwright/test @axe-core/playwright
 
+      # Passo 6: Cache para os binários do Playwright
       - name: Cache Playwright Browsers
         id: cache-playwright
         uses: actions/cache@v4
@@ -46,31 +52,39 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
+      # Passo 7: Instalar os binários do Playwright (se necessário)
       - name: Install Playwright Browsers (if needed)
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
+      # Passo 8: Iniciar o servidor do Mattermost
       - name: Start Mattermost Server
         run: |
           cd server
+          # Altere as portas no docker-compose.yml para evitar conflitos
+          sed -i 's/3307:3306/3308:3306/' docker-compose.yml
           docker-compose up -d
           make run &
 
+      # Passo 9: Aguardar o servidor estar pronto
       - name: Wait for Server
         run: npx wait-on http://localhost:8065
 
+      # Passo 10: Executar os testes de acessibilidade
       - name: Run Accessibility Tests
         id: axe-test
         run: |
           cd webapp
           node scripts/accessibility-test.js
 
+      # Passo 11: Fazer upload do relatório
       - name: Upload Results
         uses: actions/upload-artifact@v4
         with:
           name: accessibility-report
           path: webapp/reports/accessibility-report.json
 
+      # Passo 12: Comentar no PR se houver problemas de acessibilidade
       - name: Comment on PR if accessibility issues found
         if: failure()
         run: |
