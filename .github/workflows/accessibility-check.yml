@@ -27,7 +27,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          cd /mattermost/webapp
+          cd webapp
           npm install
           npm install @playwright/test @axe-core/playwright
 
@@ -46,7 +46,7 @@ jobs:
 
       - name: Start Mattermost Server
         run: |
-          cd /mattermost/server
+          cd server
           docker-compose up -d
           make run &
 
@@ -56,20 +56,20 @@ jobs:
       - name: Run Accessibility Tests
         id: axe-test
         run: |
-          cd /mattermost/webapp
+          cd webapp
           node scripts/accessibility-test.js
 
       - name: Upload Results
         uses: actions/upload-artifact@v4
         with:
           name: accessibility-report
-          path: /mattermost/webapp/reports/accessibility-report.json
+          path: webapp/reports/accessibility-report.json
 
       - name: Comment on PR if accessibility issues found
         if: failure()
         run: |
-          if [[ -f "/mattermost/webapp/reports/accessibility-report.json" ]]; then
-            REPORT=$(cat /mattermost/webapp/reports/accessibility-report.json)
+          if [[ -f "webapp/reports/accessibility-report.json" ]]; then
+            REPORT=$(cat webapp/reports/accessibility-report.json)
             COMMENT_BODY="Accessibility issues detected:\n\`\`\`json\n$REPORT\n\`\`\`"
             curl -X POST \
               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
