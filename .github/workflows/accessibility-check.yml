@@ -10,6 +10,8 @@ on:
 jobs:
   accessibility:
     runs-on: ubuntu-latest
+    env:
+      CURRENT_UID: "1001"  # Defina o UID apropriado para o seu ambiente
 
     steps:
       # Passo 1: Checkout do código
@@ -57,6 +59,7 @@ jobs:
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
+      # Passo 8: Monitorar uso de recursos antes de iniciar os contêineres
       - name: Monitor Resource Usage (Before Starting Containers)
         run: |
           echo "CPU Usage:"
@@ -66,7 +69,7 @@ jobs:
           echo "Disk Usage:"
           df -h
 
-      # Passo 8: Iniciar o servidor do Mattermost
+      # Passo 9: Iniciar o servidor do Mattermost
       - name: Start Mattermost Server
         run: |
           cd server
@@ -74,35 +77,44 @@ jobs:
           sed -i 's/3307:3306/3308:3306/' docker-compose.yaml
           docker-compose up -d
           make run &
-      
-      # Passo 9: Checar os logs dos containers
-      - name: Check Container Logs
-        if: always()
+
+      # Passo 10: Aguardar os contêineres estarem prontos
+      - name: Wait for Containers to be Healthy
         run: |
           cd server
-          docker-compose logs server-follower2-1
-          docker-compose logs server-leader-1
-          docker-compose logs server-follower-1
+          while ! docker-compose ps | grep "healthy"; do
+            echo "Waiting for containers to be healthy..."
+            sleep 10
+          done
 
-      # Passo 10: Aguardar o servidor estar pronto
+      # Passo 11: Checar os logs dos contêineres
+      - name: Check Container Logs
+        if: always()  # Executa mesmo se o passo anterior falhar
+        run: |
+          cd server
+          docker-compose logs follower2
+          docker-compose logs leader
+          docker-compose logs follower
+
+      # Passo 12: Aguardar o servidor estar pronto
       - name: Wait for Server
         run: npx wait-on http://localhost:8065
 
-      # Passo 11: Executar os testes de acessibilidade
+      # Passo 13: Executar os testes de acessibilidade
       - name: Run Accessibility Tests
         id: axe-test
         run: |
           cd webapp
           node scripts/accessibility-test.js
 
-      # Passo 12: Fazer upload do relatório
+      # Passo 14: Fazer upload do relatório
       - name: Upload Results
         uses: actions/upload-artifact@v4
         with:
           name: accessibility-report
           path: webapp/reports/accessibility-report.json
 
-      # Passo 13: Comentar no PR se houver problemas de acessibilidade
+      # Passo 15: Comentar no PR se houver problemas de acessibilidade
       - name: Comment on PR if accessibility issues found
         if: failure()
         run: |
