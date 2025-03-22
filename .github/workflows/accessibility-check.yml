@@ -79,6 +79,7 @@ jobs:
       - name: Check Container Logs
         if: always()
         run: |
+          cd server
           docker-compose logs server-follower2-1
           docker-compose logs server-leader-1
           docker-compose logs server-follower-1
