@@ -57,6 +57,15 @@ jobs:
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
+      - name: Monitor Resource Usage (Before Starting Containers)
+        run: |
+          echo "CPU Usage:"
+          top -b -n 1 | head -n 5
+          echo "Memory Usage:"
+          free -m
+          echo "Disk Usage:"
+          df -h
+
       # Passo 8: Iniciar o servidor do Mattermost
       - name: Start Mattermost Server
         run: |
@@ -65,26 +74,33 @@ jobs:
           sed -i 's/3307:3306/3308:3306/' docker-compose.yaml
           docker-compose up -d
           make run &
+      
+      # Passo 9: Checar os logs dos containers
+      - name: Check Container Logs
+        run: |
+          docker-compose logs server-follower2-1
+          docker-compose logs server-leader-1
+          docker-compose logs server-follower-1
 
-      # Passo 9: Aguardar o servidor estar pronto
+      # Passo 10: Aguardar o servidor estar pronto
       - name: Wait for Server
         run: npx wait-on http://localhost:8065
 
-      # Passo 10: Executar os testes de acessibilidade
+      # Passo 11: Executar os testes de acessibilidade
       - name: Run Accessibility Tests
         id: axe-test
         run: |
           cd webapp
           node scripts/accessibility-test.js
 
-      # Passo 11: Fazer upload do relatório
+      # Passo 12: Fazer upload do relatório
       - name: Upload Results
         uses: actions/upload-artifact@v4
         with:
           name: accessibility-report
           path: webapp/reports/accessibility-report.json
 
-      # Passo 12: Comentar no PR se houver problemas de acessibilidade
+      # Passo 13: Comentar no PR se houver problemas de acessibilidade
       - name: Comment on PR if accessibility issues found
         if: failure()
         run: |
