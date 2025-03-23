@@ -1,0 +1,98 @@
+name: Accessibility Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - master
+
+jobs:
+  accessibility:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone Repository
+        run: git clone https://github.com/mlsbez/mattermost.git .
+
+      - name: Setup Node.js 18.x
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libnspr4 libasound2t64
+
+      - name: Restore Playwright Cache (if exists)
+        run: |
+          if [ -f playwright-cache.tar.gz ]; then
+            tar -xzf playwright-cache.tar.gz -C ~/
+          fi
+
+      - name: Install Dependencies
+        run: |
+          cd webapp
+          npm install
+          npm install @playwright/test @axe-core/playwright
+
+      - name: Install Playwright Browsers (if needed)
+        run: |
+          if [ ! -d ~/.cache/ms-playwright ]; then
+            npx playwright install --with-deps
+          fi
+
+      - name: Save Playwright Cache
+        run: tar -czf playwright-cache.tar.gz -C ~/ .cache/ms-playwright
+
+      - name: Install Docker and Docker Compose
+        run: |
+          sudo apt-get remove -y containerd || true
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc > /dev/null
+          sudo chmod a+r /etc/apt/keyrings/docker.asc
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+            $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          docker --version
+          docker compose version
+
+      - name: Start Mattermost Server
+        run: |
+          cd server
+          docker compose up -d
+          make run &
+
+      - name: Wait for Server
+        run: npx wait-on http://localhost:8065
+
+      - name: Run Accessibility Tests
+        run: |
+          cd webapp
+          node scripts/accessibility-test.js
+
+      - name: Upload Results (Alternative)
+        run: |
+          mkdir -p artifacts
+          cp webapp/reports/accessibility-report.json artifacts/
+
+      - name: Comment on PR if accessibility issues found
+        if: failure()
+        run: |
+          if [[ -f "webapp/reports/accessibility-report.json" ]]; then
+            REPORT=$(cat webapp/reports/accessibility-report.json)
+            COMMENT_BODY="Accessibility issues detected:\n\`\`\`json\n$REPORT\n\`\`\`"
+            curl -X POST \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -d "{\"body\": \"$COMMENT_BODY\"}" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
+          else
+            echo "Accessibility report not found."
+          fi
+
