@@ -1,20 +1,26 @@
 services:
   mysql:
     extends:
-        file: docker-compose.common.yml
-        service: mysql
+      file: docker-compose.common.yml
+      service: mysql
     tmpfs: /var/lib/mysql
     volumes:
-     - "./docker/mysql.conf.d:/etc/mysql/conf.d"
+      - "./docker/mysql.conf.d:/etc/mysql/conf.d"
+    ports:
+      - "3307:3306"  # Mapeando para a porta 3307 na máquina host
   postgres:
     extends:
-        file: docker-compose.common.yml
-        service: postgres
+      file: docker-compose.common.yml
+      service: postgres
     tmpfs: /var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Alterando a porta do postgres
   minio:
     extends:
-        file: docker-compose.common.yml
-        service: minio
+      file: docker-compose.common.yml
+      service: minio
+    ports:
+      - "9001:9000"
   inbucket:
     extends:
         file: docker-compose.common.yml
