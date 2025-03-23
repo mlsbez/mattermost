@@ -12,18 +12,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Clone Repository
+        run: git clone https://github.com/mlsbez/mattermost.git .
 
       - name: Setup Node.js 18.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18.x
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libnss3 libnspr4 libasound2t64
+
+      - name: Restore Playwright Cache (if exists)
+        run: |
+          if [ -f playwright-cache.tar.gz ]; then
+            tar -xzf playwright-cache.tar.gz -C ~/
+          fi
 
       - name: Install Dependencies
         run: |
@@ -31,18 +37,14 @@ jobs:
           npm install
           npm install @playwright/test @axe-core/playwright
 
-      - name: Cache Playwright Browsers
-        id: cache-playwright
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
       - name: Install Playwright Browsers (if needed)
-        if: steps.cache-playwright.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps
+        run: |
+          if [ ! -d ~/.cache/ms-playwright ]; then
+            npx playwright install --with-deps
+          fi
+
+      - name: Save Playwright Cache
+        run: tar -czf playwright-cache.tar.gz -C ~/ .cache/ms-playwright
 
       - name: Start Mattermost Server
         run: |
@@ -54,16 +56,14 @@ jobs:
         run: npx wait-on http://localhost:8065
 
       - name: Run Accessibility Tests
-        id: axe-test
         run: |
           cd webapp
           node scripts/accessibility-test.js
 
-      - name: Upload Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: accessibility-report
-          path: webapp/reports/accessibility-report.json
+      - name: Upload Results (Alternative)
+        run: |
+          mkdir -p artifacts
+          cp webapp/reports/accessibility-report.json artifacts/
 
       - name: Comment on PR if accessibility issues found
         if: failure()
@@ -79,4 +79,3 @@ jobs:
           else
             echo "Accessibility report not found."
           fi
-          
