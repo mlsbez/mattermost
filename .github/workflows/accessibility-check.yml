@@ -65,7 +65,7 @@ jobs:
       - name: Start Mattermost Server
         run: |
           cd server
-          docker-compose up -d
+          docker compose up -d
           make run &
 
       - name: Wait for Server
