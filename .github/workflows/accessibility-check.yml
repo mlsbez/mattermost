@@ -10,48 +10,27 @@ on:
 jobs:
   accessibility:
     runs-on: ubuntu-latest
-    env:
-      CURRENT_UID: "1001"  # Defina o UID apropriado para o seu ambiente
 
     steps:
-      # Passo 1: Checkout do código
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.ENTERPRISE_REPO_TOKEN }}  # Adicione o token aqui
 
-      # Passo 2: Clonar o repositório enterprise
-      - name: Clone Enterprise Repository
-        run: |
-          git clone https://${{ secrets.ENTERPRISE_REPO_TOKEN }}@github.com/mattermost/enterprise.git ../enterprise
-
-      # Passo 3: Configurar Node.js
       - name: Setup Node.js 18.x
         uses: actions/setup-node@v4
         with:
           node-version: 18.x
 
-      # Passo 4: Instalar dependências do sistema
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libnss3 libnspr4 libasound2t64
 
-      # Passo 5: Instalar Docker Compose
-      - name: Install Docker Compose
-        run: |
-          sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-          docker-compose --version
-
-      # Passo 6: Instalar dependências do projeto
-      - name: Install Project Dependencies
+      - name: Install Dependencies
         run: |
           cd webapp
           npm install
           npm install @playwright/test @axe-core/playwright
 
-      # Passo 7: Cache para os binários do Playwright
       - name: Cache Playwright Browsers
         id: cache-playwright
         uses: actions/cache@v4
@@ -61,67 +40,31 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
-      # Passo 8: Instalar os binários do Playwright (se necessário)
       - name: Install Playwright Browsers (if needed)
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
-      # Passo 9: Monitorar uso de recursos antes de iniciar os contêineres
-      - name: Monitor Resource Usage (Before Starting Containers)
-        run: |
-          echo "CPU Usage:"
-          top -b -n 1 | head -n 5
-          echo "Memory Usage:"
-          free -m
-          echo "Disk Usage:"
-          df -h
-
-      # Passo 10: Iniciar o servidor do Mattermost
       - name: Start Mattermost Server
         run: |
           cd server
-          # Altere as portas no docker-compose.yaml para evitar conflitos
-          sed -i 's/3307:3306/3308:3306/' docker-compose.yaml
           docker-compose up -d
           make run &
 
-      # Passo 11: Aguardar os contêineres estarem prontos
-      - name: Wait for Containers to be Healthy
-        run: |
-          cd server
-          while ! docker-compose ps | grep "healthy"; do
-            echo "Waiting for containers to be healthy..."
-            sleep 10
-          done
-
-      # Passo 12: Checar os logs dos contêineres
-      - name: Check Container Logs
-        if: always()  # Executa mesmo se o passo anterior falhar
-        run: |
-          cd server
-          docker-compose logs follower2
-          docker-compose logs leader
-          docker-compose logs follower
-
-      # Passo 13: Aguardar o servidor estar pronto
       - name: Wait for Server
         run: npx wait-on http://localhost:8065
 
-      # Passo 14: Executar os testes de acessibilidade
       - name: Run Accessibility Tests
         id: axe-test
         run: |
           cd webapp
           node scripts/accessibility-test.js
 
-      # Passo 15: Fazer upload do relatório
       - name: Upload Results
         uses: actions/upload-artifact@v4
         with:
           name: accessibility-report
           path: webapp/reports/accessibility-report.json
 
-      # Passo 16: Comentar no PR se houver problemas de acessibilidade
       - name: Comment on PR if accessibility issues found
         if: failure()
         run: |
